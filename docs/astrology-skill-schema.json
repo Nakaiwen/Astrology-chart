@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Astrology Skill Chart Input",
+  "description": "Preferred input contract for astrology reading requests. External chart tools may include additional fields at the root, chart_data, and nested factor levels.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["reading_type", "chart_data"],
+  "properties": {
+    "reading_type": {
+      "description": "The primary kind of reading requested.",
+      "type": "string",
+      "enum": [
+        "natal",
+        "transit",
+        "synastry",
+        "solar_return",
+        "annual_profection",
+        "horary",
+        "electional",
+        "mundane"
+      ]
+    },
+    "tradition_mode": {
+      "description": "Interpretive framework to prioritize.",
+      "type": "string",
+      "enum": ["classical", "modern", "blended"],
+      "default": "blended"
+    },
+    "tone": {
+      "description": "Preferred voice for the reading.",
+      "type": "string",
+      "enum": [
+        "practical",
+        "poetic",
+        "psychological",
+        "technical",
+        "beginner-friendly"
+      ],
+      "default": "practical"
+    },
+    "user_question": {
+      "description": "The querent's question, focus, or context in their own words.",
+      "type": "string",
+      "minLength": 1
+    },
+    "chart_data": {
+      "description": "Structured chart factors supplied by the user or an external chart calculation tool.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source_notes": {
+          "type": "string"
+        },
+        "birth_time_confidence": {
+          "type": "string"
+        },
+        "house_system": {
+          "type": "string"
+        },
+        "ascendant": {
+          "$ref": "#/$defs/zodiac_position"
+        },
+        "midheaven": {
+          "$ref": "#/$defs/zodiac_position"
+        },
+        "sect": {
+          "description": "Day/night status for classical weighting. Use unknown when unavailable.",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["day", "night", "unknown"]
+            },
+            {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["status"],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["day", "night", "unknown"]
+                },
+                "luminary_of_sect": { "type": "string" },
+                "sect_mate_planets": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "notes": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "placements": {
+          "description": "Bodies, angles, points, and other chart placements.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["body"],
+            "properties": {
+              "body": { "type": "string" },
+              "sign": { "$ref": "#/$defs/zodiac_sign" },
+              "degree": {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 30
+              },
+              "absolute_degree": {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 360
+              },
+              "house": { "$ref": "#/$defs/house" },
+              "motion": {
+                "type": "string",
+                "enum": ["direct", "retrograde", "stationary", "unknown"]
+              },
+              "condition": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "dignity": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "rules_houses": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/house" }
+              },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "aspects": {
+          "description": "Interplanetary or point-to-point aspect data.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["body_a", "aspect", "body_b"],
+            "properties": {
+              "body_a": { "type": "string" },
+              "aspect": {
+                "type": "string",
+                "enum": [
+                  "conjunction",
+                  "opposition",
+                  "trine",
+                  "square",
+                  "sextile",
+                  "quincunx",
+                  "semisextile",
+                  "semisquare",
+                  "sesquisquare",
+                  "parallel",
+                  "contraparallel",
+                  "other"
+                ]
+              },
+              "body_b": { "type": "string" },
+              "orb_degrees": { "type": "number" },
+              "applying": { "type": "boolean" },
+              "separating": { "type": "boolean" },
+              "exact": { "type": "boolean" },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "lots": {
+          "description": "Lots or Arabic Parts relevant to the reading.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "sign": { "$ref": "#/$defs/zodiac_sign" },
+              "degree": {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 30
+              },
+              "absolute_degree": {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 360
+              },
+              "house": { "$ref": "#/$defs/house" },
+              "formula": { "type": "string" },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "timing_factors": {
+          "description": "Transits, profections, progressions, directions, returns, or other timing techniques.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["technique"],
+            "properties": {
+              "technique": {
+                "type": "string",
+                "examples": [
+                  "transit",
+                  "annual_profection",
+                  "secondary_progression",
+                  "solar_return"
+                ]
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "date_time": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "description": { "type": "string" },
+              "active_house": { "$ref": "#/$defs/house" },
+              "time_lord": { "type": "string" },
+              "triggering_body": { "type": "string" },
+              "natal_body": { "type": "string" },
+              "aspect": { "type": "string" },
+              "orb_degrees": { "type": "number" },
+              "notes": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "house": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "zodiac_position": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "sign": { "$ref": "#/$defs/zodiac_sign" },
+            "degree": {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 30
+            },
+            "absolute_degree": {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 360
+            }
+          }
+        }
+      ]
+    },
+    "zodiac_sign": {
+      "type": "string",
+      "enum": [
+        "Aries",
+        "Taurus",
+        "Gemini",
+        "Cancer",
+        "Leo",
+        "Virgo",
+        "Libra",
+        "Scorpio",
+        "Sagittarius",
+        "Capricorn",
+        "Aquarius",
+        "Pisces"
+      ]
+    }
+  }
+}

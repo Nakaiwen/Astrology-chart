@@ -1,0 +1,19 @@
+星圖室 v1.0.2｜離線使用／GitHub Pages 版
+
+1. 請完整解壓縮此檔案。
+2. 直接雙擊本資料夾內的 index.html，以瀏覽器開啟。
+3. 輸入出生資料，按「繪製我的星盤」。
+
+程式、版面與 Swiss Ephemeris 星曆已內嵌於 index.html，不需啟動伺服器，也不需要連線下載星曆。
+預設資料為 2000-01-01 12:00，台北，名稱「示範星盤」。
+本包不含個人出生資料。
+
+保留 source.zip 與 ephemeris/LICENSE.txt，供頁尾原始碼及授權連結使用。
+source.zip 是開發原始碼，需要修改程式時才解壓縮；其中 src/index.html 是開發用入口，不能直接雙擊執行。
+
+GitHub Pages：將本資料夾裡的檔案上傳至儲存庫根目錄，Pages 選擇 main / (root)。
+本次修正版尚未透過 GitHub 提交。
+
+修正內容：改為傳統內嵌 JavaScript、內嵌 CSS 與 WASM，移除雙擊本機檔案時會被阻擋的模組及外部星曆載入。
+驗證：11 項排盤檢查、TypeScript、產物語法及內嵌資源核對、瀏覽器預覽排盤與 JSON／PNG 匯出。
+測試限制：雲端測試瀏覽器不允許 file:// 網址，未實測 macOS / Safari 的雙擊開檔。
