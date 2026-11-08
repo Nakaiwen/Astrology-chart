@@ -4,10 +4,12 @@ import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, Compass, Copy, FileJ
 import { ASPECT_COLORS, ASPECT_ZH, BODY_GLYPHS, BODY_ZH, calculateChart, type Chart, DEFAULT_INPUT, DIGNITY_ZH, type FormInput, formatPosition, readingPrompt } from '@/lib/astrology';
 import { CITIES } from '@/lib/cities';
 import { wheelSvg } from '@/lib/chart-svg';
+import PeriodPanel from './period-panel';
 type Tab = 'placements'|'houses'|'aspects'|'json';
 const HOUSE_LABELS = {Placidus:'普拉西德宮制', 'Whole Sign':'整宮制', Equal:'等宮制'};
 function saveBlob(blob:Blob,name:string){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
 export default function Home(){
+ const [view,setView]=useState<'natal'|'monthly'|'yearly'>('natal');
  const [form,setForm]=useState<FormInput>({...DEFAULT_INPUT}),[city,setCity]=useState('taipei');
  const [chart,setChart]=useState<Chart|null>(null),[snapshot,setSnapshot]=useState('');
  const [busy,setBusy]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -17,7 +19,7 @@ export default function Home(){
  const dirty=!!chart&&snapshot!==JSON.stringify(form);
  const svg=useMemo(()=>chart?wheelSvg(chart,selected):'',[chart,selected]);
  const set=<K extends keyof FormInput>(key:K,value:FormInput[K])=>setForm(f=>({...f,[key]:value}));
- async function calculate(input:FormInput){setBusy(true);setError('');setNotice('');try{const result=await calculateChart(input);setChart(result);setSnapshot(JSON.stringify(input));setSelected(null);}catch(e){setError(e instanceof Error?e.message:'排盤未完成，請檢查資料後再試。');}finally{setBusy(false);}}
+ async function calculate(input:FormInput){setBusy(true);setError('');setNotice('');try{const result=await calculateChart(input);setChart(result);setSnapshot(JSON.stringify(input));setSelected(null);return result;}catch(e){setError(e instanceof Error?e.message:'排盤未完成，請檢查資料後再試。');return null;}finally{setBusy(false);}}
  useEffect(()=>{if(initial.current)return;initial.current=true;void calculate(DEFAULT_INPUT);},[]);
  useEffect(()=>{if(help||zoom||copyFallback){dialog.current?.showModal();}else dialog.current?.close();},[help,zoom,copyFallback]);
  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),5000);return()=>clearTimeout(t);},[notice]);
@@ -30,9 +32,9 @@ export default function Home(){
  async function exportPng(){if(!chart||dirty)return;setPngBusy(true);try{const source=wheelSvg(chart,null,true),url=URL.createObjectURL(new Blob([source],{type:'image/svg+xml;charset=utf-8'}));try{const img=new Image();await new Promise<void>((ok,no)=>{img.onload=()=>ok();img.onerror=()=>no(new Error('圖片轉換失敗'));img.src=url;});const canvas=document.createElement('canvas');canvas.width=2160;canvas.height=2160;const ctx=canvas.getContext('2d');if(!ctx)throw new Error('瀏覽器無法建立圖片');ctx.drawImage(img,0,0,2160,2160);const blob=await new Promise<Blob|null>(ok=>canvas.toBlob(ok,'image/png'));if(!blob)throw new Error('圖片輸出失敗');saveBlob(blob,`natal_${chart.metadata.local_date}.png`);setNotice('2160 × 2160 星盤圖片已準備下載。');}finally{URL.revokeObjectURL(url);}}catch(e){setNotice(e instanceof Error?e.message:'圖片輸出失敗，請再試一次。');}finally{setPngBusy(false);}}
  const disabled=busy||dirty||!chart,focused=chart?.chart_data.placements.find(p=>p.body===selected);
  return <>
-  <header className="topbar"><div className="bar-inner"><a className="brand" href="#" aria-label="星圖室首頁"><span className="brand-mark"><Compass size={27} strokeWidth={1.1}/></span><span>星圖室<small>NATAL ATELIER</small></span></a><nav><span className="nav-active">本命排盤</span><button onClick={()=>setHelp(true)}>使用方式 <ArrowUpRight size={14}/></button></nav><span className="header-caption">A MOMENT, A CONSTELLATION.</span></div></header>
+  <header className="topbar"><div className="bar-inner"><a className="brand" href="#" aria-label="星圖室首頁"><span className="brand-mark"><Compass size={27} strokeWidth={1.1}/></span><span>星圖室<small>NATAL ATELIER</small></span></a><nav aria-label="排盤模式">{([['natal','本命盤'],['monthly','月運'],['yearly','年運']] as const).map(([id,label])=><button key={id} className={view===id?'nav-active':''} aria-current={view===id?'page':undefined} onClick={()=>setView(id)}>{label}</button>)}<button onClick={()=>setHelp(true)}>使用方式 <ArrowUpRight size={14}/></button></nav><span className="header-caption">A MOMENT, A CONSTELLATION.</span></div></header>
   <main>
-   <section className="intro"><div><p className="eyebrow"><span/> YOUR PERSONAL SKY</p><h1>從出生那一刻，<em>讀懂你的星圖。</em></h1><p className="intro-description">繪製本命星盤，整理行星、宮位與相位，讓每一次解讀都有清楚的起點。</p></div><div className="intro-note"><span>01 — NATAL CHART</span><p>一張星圖，<br/>一份探索自己的座標。</p><Sparkles size={28} strokeWidth={1}/></div></section>
+   <section className="intro"><div><p className="eyebrow"><span/> YOUR PERSONAL SKY</p><h1>從出生那一刻，<em>讀懂你的星圖。</em></h1><p className="intro-description">從本命星盤到月運與年運，整理你的特質，也看見不同時期的生活主題。</p></div><div className="intro-note"><span>01 — NATAL CHART</span><p>一張星圖，<br/>一份探索自己的座標。</p><Sparkles size={28} strokeWidth={1}/></div></section>
    <div className="workspace">
     <aside className="input-column">
      <form className="form-card" onSubmit={e=>{e.preventDefault();void calculate({...form});}}>
@@ -55,13 +57,13 @@ export default function Home(){
       </div></details>
       <details className="advanced question"><summary>想了解的主題 <ChevronDown size={14}/></summary><label className="field"><span className="sr-only">解盤問題</span><textarea value={form.question} onChange={e=>set('question',e.target.value)} rows={3} maxLength={1000}/></label></details>
       {error&&<p className="error-box" role="alert"><Info size={16}/>{error}</p>}
-      <button type="submit" className="primary calculate" disabled={busy}>{busy?<LoaderCircle className="spin" size={17}/>:<Sparkles size={17}/>} {busy?'正在計算星圖…':'繪製我的星盤'}{!busy&&<ArrowUpRight size={17}/>}</button>
+      <button type="submit" className="primary calculate" disabled={busy}>{busy?<LoaderCircle className="spin" size={17}/>:<Sparkles size={17}/>} {busy?'正在計算星圖…':view==='natal'?'繪製我的星盤':'更新本命資料'}{!busy&&<ArrowUpRight size={17}/>}</button>
       <p className="privacy"><ShieldCheck size={13}/>出生資料在你的瀏覽器內計算</p>
      </form>
      <div className="next-note"><span className="tiny-star">✧</span><div><h3>把星圖帶進下一段對話</h3><p>完成排盤後，複製解盤資料或下載 JSON，交給 astrology-skill 接續解讀。</p><button className="text-button" onClick={()=>setHelp(true)}>了解使用步驟 <ArrowUpRight size={13}/></button></div></div>
     </aside>
     <section className="result-column" aria-label="排盤結果" aria-busy={busy}>
-     {chart?<>
+     {view!=='natal'?<PeriodPanel mode={view} form={form} natal={chart} natalBusy={busy} calculateNatal={()=>calculate({...form})}/>:chart?<>
       <div className="chart-card">
        <div className="chart-heading"><div><p className="eyebrow">THE SKY AT YOUR BEGINNING</p><h2>{chart.metadata.name}<span>本命星盤</span></h2><p className="birth-caption">{chart.metadata.local_date.replaceAll('-',' / ')} <b>·</b> {chart.metadata.local_time??'時間不確定'} <b>·</b> {chart.metadata.place}</p></div><span className="system-pill">{HOUSE_LABELS[chart.chart_data.house_system]}</span></div>
        {dirty&&<div className="dirty-banner" role="status"><Info size={15}/>資料已變更，請按「繪製我的星盤」更新結果。</div>}
@@ -82,11 +84,11 @@ export default function Home(){
      </>:<div className="loading-chart"><Compass size={58} strokeWidth={.8}/><h2>{busy?'正在展開你的星圖':'星圖等待你的資料'}</h2><p>{busy?'首次開啟正在載入排盤引擎，稍候即可。':'在左方確認出生資料，再試一次。'}</p>{busy&&<LoaderCircle className="spin" size={20}/>}</div>}
     </section>
    </div>
-   <footer><div><span className="footer-brand">✧ 星圖室</span><span>以星圖為起點，以理解為方向。</span></div><div><button onClick={()=>setHelp(true)}>計算與使用說明</button><a href="./source.zip" download>原始碼</a><a href="./ephemeris/LICENSE.txt" target="_blank" rel="noreferrer">AGPL-3.0</a><span>v1.0.1</span></div></footer>
+   <footer><div><span className="footer-brand">✧ 星圖室</span><span>以星圖為起點，以理解為方向。</span></div><div><button onClick={()=>setHelp(true)}>計算與使用說明</button><a href="./source.zip" download>原始碼</a><a href="./ephemeris/LICENSE.txt" target="_blank" rel="noreferrer">AGPL-3.0</a><span>v1.1.0</span></div></footer>
   </main>
   {notice&&<div className="toast" role="status"><Check size={17}/>{notice}</div>}
   <dialog ref={dialog} className={zoom?'modal zoom-modal':'modal'} onCancel={closeDialog} onClick={e=>{if(e.target===e.currentTarget)closeDialog();}}><button className="modal-close" aria-label="關閉" onClick={closeDialog}><X size={20}/></button>
-   {help&&<div className="help-content"><p className="eyebrow">A SMALL GUIDE</p><h2>從排盤到解讀，三個步驟。</h2><ol className="steps"><li><span>01</span><div><h3>確認出生資料</h3><p>填寫當地出生日期、時間與地點。預設普拉西德宮制，也能改用整宮制或等宮制。</p></div></li><li><span>02</span><div><h3>繪製並檢查星盤</h3><p>檢視十顆行星、真北交點、十二宮位與主要相位。點選行星可以突出相關相位連線。</p></div></li><li><span>03</span><div><h3>交給解盤技能</h3><p>按「複製解盤資料」，貼到能使用 astrology-skill 的 AI 對話；或下載 JSON 後上傳，並說「請依這份資料解讀本命星盤」。本工具提供排盤資料，解讀由該技能完成。</p></div></li></ol><div className="help-note"><h3>關於計算</h3><p>採 Swiss Ephemeris 2.10.03 的 Moshier 計算，支援西元 1900–2100 年。使用回歸黃道、地心位置與公曆；宮位依黃經落點分配。日夜盤以太陽幾何高度判定；水星依晨星／昏星分派。只計算主要本質尊貴，未計算界、面、互容、燃燒與可見性。</p><p>出生時間未知時，以正午作行星參考，不產生上升、宮位、日夜盤與福點。城市預設為市中心；歷史時區依瀏覽器時區資料換算。若接近換座、宮頭或日出日落，出生時間誤差會影響結果。</p><p>資料在瀏覽器本機計算，不傳送至外部排盤 API，也不自動保存。占星解讀適合象徵性的自我探索，並非事件必然發生的預測。</p></div><div className="credits"><a href="https://github.com/wvanderen/astrology-skill" target="_blank" rel="noreferrer">解盤資料格式：astrology-skill ↗</a><a href="https://github.com/swisseph-js/swisseph" target="_blank" rel="noreferrer">計算引擎：Swiss Ephemeris ↗</a><a href="./source.zip" download>下載完整工具原始碼</a></div></div>}
+   {help&&<div className="help-content"><p className="eyebrow">A SMALL GUIDE</p><h2>從排盤到解讀，三個步驟。</h2><ol className="steps"><li><span>01</span><div><h3>確認出生資料</h3><p>填寫當地出生日期、時間與地點。預設普拉西德宮制，也能改用整宮制或等宮制。</p></div></li><li><span>02</span><div><h3>選擇本命盤、月運或年運</h3><p>本命盤可檢視行星、宮位與相位。月運、年運切頁可選觀察期間，按計算後整理行運重點、時間表與十二個月概覽。</p></div></li><li><span>03</span><div><h3>帶著資料繼續解讀</h3><p>月運與年運也能複製完整解盤資料、下載 JSON，或用列印功能另存 PDF。按「複製解盤資料」，貼到能使用 astrology-skill 的 AI 對話；或下載 JSON 後上傳，並說「請依這份資料解讀本命星盤」。本工具提供排盤資料，解讀由該技能完成。</p></div></li></ol><div className="help-note"><h3>關於計算</h3><p>採 Swiss Ephemeris 2.10.03 的 Moshier 計算，支援西元 1900–2100 年。使用回歸黃道、地心位置與公曆；宮位依黃經落點分配。日夜盤以太陽幾何高度判定；水星依晨星／昏星分派。只計算主要本質尊貴，未計算界、面、互容、燃燒與可見性。</p><p>出生時間未知時，以正午作行星參考，不產生上升、宮位、日夜盤與福點。城市預設為市中心；歷史時區依瀏覽器時區資料換算。若接近換座、宮頭或日出日落，出生時間誤差會影響結果。</p><p>資料在瀏覽器本機計算，不傳送至外部排盤 API，也不自動保存。占星解讀適合象徵性的自我探索，並非事件必然發生的預測。</p></div><div className="credits"><a href="https://github.com/wvanderen/astrology-skill" target="_blank" rel="noreferrer">解盤資料格式：astrology-skill ↗</a><a href="https://github.com/swisseph-js/swisseph" target="_blank" rel="noreferrer">計算引擎：Swiss Ephemeris ↗</a><a href="./source.zip" download>下載完整工具原始碼</a></div></div>}
    {zoom&&chart&&<div className="zoom-content"><h2>{chart.metadata.name}</h2><div onClick={wheelClick} dangerouslySetInnerHTML={{__html:svg}}/></div>}
    {copyFallback&&chart&&<div className="help-content"><h2>手動複製解盤資料</h2><p>瀏覽器未開放自動複製，請選取下方全部內容再複製。</p><textarea className="copy-fallback" readOnly value={readingPrompt(chart)} onFocus={e=>e.target.select()} autoFocus/><button className="primary" onClick={exportJson}><ArrowDownToLine size={16}/>改為下載 JSON</button></div>}
   </dialog>
