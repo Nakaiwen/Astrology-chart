@@ -1,6 +1,7 @@
 import { Temporal } from '@js-temporal/polyfill';
 import type { SwissEphemeris } from '@swisseph/browser';
 
+export const VERSION = '1.2.0';
 export const SIGNS = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
 export const SIGN_ZH = ['牡羊','金牛','雙子','巨蟹','獅子','處女','天秤','天蠍','射手','摩羯','水瓶','雙魚'];
 export const SIGN_GLYPHS = ['♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓'];
@@ -97,7 +98,28 @@ export function calculateWithEngine(swe:SwissEphemeris,input:FormInput):Chart{
     lots=[{name:'Lot of Fortune',...zodiac(fortune),house:houseOf(fortune,cusps),formula:day?'Asc + Moon - Sun (day)':'Asc + Sun - Moon (night)'}];
   }
   const orbs=input.orb==='focused'?'主要相位 6°，六合 4°':'日月 10°，水金火 7°，其他行星與軸點 8°，真交點 5°；兩者取較大值，六合上限 6°';
-  return {reading_type:'natal',tradition_mode:input.tradition,tone:'practical',language:'zh-TW',...(input.question.trim()?{user_question:input.question.trim()}:{}),chart_data:{house_system:input.houseSystem,birth_time_confidence:input.unknownTime?'Unknown':'Timed',...(hd&&cusps?{ascendant:zodiac(hd.ascendant),midheaven:zodiac(hd.mc),house_cusps:cusps.map((c,i)=>({house:i+1,...zodiac(c)})),house_rulers:houseRulers}:{}),placements,aspects,sect,...(mercurySect?{mercury_sect:mercurySect}:{}),...(lots?{lots}:{}),source_notes:`星圖室 1.1.0; Swiss Ephemeris ${swe.version()} / @swisseph/browser 1.4.0; Moshier built-in. Tropical, geocentric, Gregorian calendar. ${input.houseSystem}; ${orbs}. Traditional domicile rulers; modern co-rulers stored separately. Only major essential dignities are computed; minor dignity, reception, combustion and visibility are not computed. Longitude-interval house placement. ${warnings.join(' ')}`},metadata:{version:'1.1.0',name:input.name.trim()||'我的星盤',place:input.place.trim()||'自訂地點',local_date:input.date,local_time:input.unknownTime?null:input.time,reference_time:time.reference,utc:time.date.toISOString(),timezone:input.timezone.trim(),utc_offset:time.offset,latitude:lat,longitude:lon,julian_day:jd,ephemeris:`Swiss Ephemeris ${swe.version()} · Moshier`,aspect_orbs:orbs,warnings}};
+  return {reading_type:'natal',tradition_mode:input.tradition,tone:'practical',language:'zh-TW',...(input.question.trim()?{user_question:input.question.trim()}:{}),chart_data:{house_system:input.houseSystem,birth_time_confidence:input.unknownTime?'Unknown':'Timed',...(hd&&cusps?{ascendant:zodiac(hd.ascendant),midheaven:zodiac(hd.mc),house_cusps:cusps.map((c,i)=>({house:i+1,...zodiac(c)})),house_rulers:houseRulers}:{}),placements,aspects,sect,...(mercurySect?{mercury_sect:mercurySect}:{}),...(lots?{lots}:{}),source_notes:`星圖室 ${VERSION}; Swiss Ephemeris ${swe.version()} / @swisseph/browser 1.4.0; Moshier built-in. Tropical, geocentric, Gregorian calendar. ${input.houseSystem}; ${orbs}. Traditional domicile rulers; modern co-rulers stored separately. Only major essential dignities are computed; minor dignity, reception, combustion and visibility are not computed. Longitude-interval house placement. ${warnings.join(' ')}`},metadata:{version:VERSION,name:input.name.trim()||'我的星盤',place:input.place.trim()||'自訂地點',local_date:input.date,local_time:input.unknownTime?null:input.time,reference_time:time.reference,utc:time.date.toISOString(),timezone:input.timezone.trim(),utc_offset:time.offset,latitude:lat,longitude:lon,julian_day:jd,ephemeris:`Swiss Ephemeris ${swe.version()} · Moshier`,aspect_orbs:orbs,warnings}};
+}
+
+/** Rebuild the input form from any exported JSON: natal, transit (monthly/yearly) or year_bundle. */
+export function formFromExport(data:unknown):FormInput{
+  const d=data as {reading_type?:string;chart_data?:Chart['chart_data'];metadata?:Chart['metadata'];natal_metadata?:Chart['metadata'];natal?:Chart;tradition_mode?:string;user_question?:string}|null;
+  const chart=
+    d?.reading_type==='natal'&&d.chart_data&&d.metadata?{chart_data:d.chart_data,metadata:d.metadata,tradition_mode:d.tradition_mode,user_question:d.user_question}:
+    d?.reading_type==='year_bundle'&&d.natal?.chart_data&&d.natal.metadata?{chart_data:d.natal.chart_data,metadata:d.natal.metadata,tradition_mode:d.natal.tradition_mode as string|undefined,user_question:d.natal.user_question}:
+    d?.reading_type==='transit'&&d.chart_data&&d.natal_metadata?{chart_data:d.chart_data,metadata:d.natal_metadata,tradition_mode:d.tradition_mode,user_question:d.user_question}:null;
+  if(!chart||!/^\d{4}-\d{2}-\d{2}$/.test(chart.metadata.local_date??'')||!Array.isArray(chart.chart_data.placements))throw new Error('無法辨識檔案內容：請選擇星圖室匯出的 JSON（本命盤、月運、年運或全年組合包）。');
+  const m=chart.metadata;
+  if(!Number.isFinite(m.latitude)||!Number.isFinite(m.longitude)||typeof m.timezone!=='string'||!m.timezone)throw new Error('檔案缺少出生地經緯度或時區，無法還原出生資料。');
+  const question=typeof chart.user_question==='string'&&chart.user_question&&!chart.user_question.startsWith('請白話解讀這段')?chart.user_question:DEFAULT_INPUT.question;
+  return {
+    name:typeof m.name==='string'?m.name.slice(0,40):'',
+    date:m.local_date,time:typeof m.local_time==='string'?m.local_time.slice(0,5):'12:00',unknownTime:m.local_time===null,
+    place:typeof m.place==='string'?m.place:'',latitude:String(m.latitude),longitude:String(m.longitude),timezone:m.timezone,
+    houseSystem:(['Placidus','Whole Sign','Equal'] as HouseSystemName[]).includes(chart.chart_data.house_system)?chart.chart_data.house_system:'Placidus',
+    tradition:chart.tradition_mode==='classical'||chart.tradition_mode==='modern'?chart.tradition_mode:'blended',
+    question,orb:(m.aspect_orbs??'').startsWith('主要相位')?'focused':'standard',disambiguation:'reject',
+  };
 }
 
 export function readingPrompt(chart:Chart){return `請使用 astrology-skill 解讀以下已計算的本命星盤，以繁體中文回答。保留資料中的宮制、相位容許度與不確定性；不要補造缺少的星盤因素。先綜合主要結構，再回應 user_question。不要把星盤象徵說成必然發生的事件。\n\n${JSON.stringify(chart,null,2)}`;}

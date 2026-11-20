@@ -91,3 +91,20 @@ await test('cancellation and pre-birth requests do not produce reports', async (
 });
 console.log(`${passed} transit checks passed.`);
 swe.close();
+
+const { calculateYearBundleWithEngine } = await import('../lib/transits.ts');
+await test('year bundle holds natal, yearly and twelve consistent monthly blocks', async () => {
+  const b = await calculateYearBundleWithEngine(swe, natal, 2027, 'Asia/Taipei');
+  assert.equal(b.reading_type, 'year_bundle');
+  assert.equal(b.transit_year, 2027);
+  assert.deepEqual(b.natal, natal);
+  assert.equal(b.yearly.mode, 'yearly');
+  assert.equal(b.monthly.length, 12);
+  b.monthly.forEach((m, i) => { assert.equal(m.mode, 'monthly'); assert.equal(m.period.local_start, `2027-${String(i + 1).padStart(2, '0')}-01`); assert.equal(m.months.length, 1); });
+  const slowYear = await calculateTransitsWithEngine(swe, natal, { mode: 'yearly', year: 2027, month: 1, timezone: 'Asia/Taipei' });
+  assert.equal(b.yearly.events.length, slowYear.transit_data.events.length);
+  console.log(`  Bundle: yearly ${b.yearly.events.length} windows, monthly ${b.monthly.reduce((n, m) => n + m.events.length, 0)} windows`);
+});
+await test('year bundle rejects a year entirely before birth', async () => {
+  await assert.rejects(calculateYearBundleWithEngine(swe, natal, 1990, 'Asia/Taipei'), /早於出生/);
+});

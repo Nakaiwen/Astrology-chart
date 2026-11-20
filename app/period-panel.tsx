@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, CalendarDays, Check, ChevronDown, Copy, FileJson, Info, LoaderCircle, Printer, Sparkles, X } from 'lucide-react';
 import { BODY_ZH, ASPECT_COLORS, formatPosition, type Chart, type FormInput } from '../lib/astrology';
-import { calculateTransits, eventGuidance, eventTitle, periodRange, primaryEvents, transitPrompt, type PeriodMode, type TransitEvent, type TransitReport } from '../lib/transits';
+import { calculateTransits, calculateYearBundle, eventGuidance, eventTitle, periodRange, primaryEvents, transitPrompt, type PeriodMode, type TransitEvent, type TransitReport } from '../lib/transits';
 
 type Props = { mode: PeriodMode; form: FormInput; natal: Chart | null; natalBusy: boolean; calculateNatal: () => Promise<Chart | null> };
 const ZONES = ['Asia/Taipei', 'Asia/Hong_Kong', 'Asia/Shanghai', 'Asia/Tokyo', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Australia/Sydney', 'UTC'];
@@ -18,13 +18,14 @@ export default function PeriodPanel({ mode, form, natal, natalBusy, calculateNat
   const [report, setReport] = useState<TransitReport | null>(null), [resultKey, setResultKey] = useState('');
   const [running, setRunning] = useState(false), [progress, setProgress] = useState(0), [error, setError] = useState('');
   const [filterMonth, setFilterMonth] = useState<number | null>(null), [copied, setCopied] = useState(false), [fallback, setFallback] = useState(false);
+  const [bundleBusy, setBundleBusy] = useState(false), [bundleProgress, setBundleProgress] = useState(0);
   const controller = useRef<AbortController | null>(null), dialog = useRef<HTMLDialogElement>(null);
   const key = JSON.stringify({ mode, year, month: mode === 'monthly' ? month : null, timezone, form });
   const currentKey = useRef(key); currentKey.current = key;
   const dirty = !!report && key !== resultKey;
   const label = mode === 'monthly' ? '月運' : '年運';
   useEffect(() => {
-    controller.current?.abort(); setRunning(false); setError(''); setFilterMonth(null); setFallback(false); setCopied(false);
+    controller.current?.abort(); setRunning(false); setBundleBusy(false); setError(''); setFilterMonth(null); setFallback(false); setCopied(false);
     return () => controller.current?.abort();
   }, [key]);
   useEffect(() => { if (fallback) dialog.current?.showModal(); else dialog.current?.close(); }, [fallback]);
@@ -32,7 +33,7 @@ export default function PeriodPanel({ mode, form, natal, natalBusy, calculateNat
   async function run() {
     controller.current?.abort(); const task = new AbortController(); controller.current = task;
     const request = { mode, year: Number(year), month, timezone: timezone.trim() };
-    setError(''); setRunning(true); setProgress(0); setCopied(false); setFilterMonth(null);
+    setError(''); setRunning(true); setBundleBusy(false); setProgress(0); setCopied(false); setFilterMonth(null);
     try {
       periodRange(request);
       const updated = await calculateNatal();
@@ -44,6 +45,24 @@ export default function PeriodPanel({ mode, form, natal, natalBusy, calculateNat
     } catch (e) {
       if (!task.signal.aborted) setError(e instanceof Error ? e.message : '計算未完成，請再試一次。');
     } finally { if (controller.current === task) setRunning(false); }
+  }
+  async function runBundle() {
+    controller.current?.abort(); const task = new AbortController(); controller.current = task;
+    const y = Number(year), tz = timezone.trim();
+    setError(''); setRunning(false); setBundleBusy(true); setBundleProgress(0);
+    try {
+      periodRange({ mode: 'yearly', year: y, month: 1, timezone: tz });
+      const updated = await calculateNatal();
+      if (!updated) throw new Error('請先修正左側出生資料，再匯出全年組合包。');
+      if (task.signal.aborted) return;
+      const bundle = await calculateYearBundle(updated, y, tz, { signal: task.signal, onProgress: setBundleProgress });
+      if (task.signal.aborted) return;
+      const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json;charset=utf-8' }));
+      const a = document.createElement('a'); a.href = url; a.download = `bundle_${y}.json`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) {
+      if (!task.signal.aborted) setError(e instanceof Error ? e.message : '組合包計算未完成，請再試一次。');
+    } finally { if (controller.current === task) setBundleBusy(false); }
   }
   async function copy() {
     if (!report || dirty || running) return;
@@ -75,6 +94,11 @@ export default function PeriodPanel({ mode, form, natal, natalBusy, calculateNat
         </div>
         <div className="period-action"><button type="submit" className="primary" disabled={running || natalBusy}>{running ? <LoaderCircle size={16} className="spin"/> : <Sparkles size={16}/>} {running ? `計算中 ${progress}%` : `計算${label}`} {!running && <ArrowUpRight size={15}/>}</button><p>會套用左側最新出生資料。<br/>{mode === 'monthly' ? '依公曆月份計算' : '依公曆 1 月至 12 月計算'}，日期採上方時區。</p>{running && <button type="button" className="text-button" onClick={() => { controller.current?.abort(); setRunning(false); }}>取消計算</button>}</div>
       </form>
+      {mode === 'yearly' && <div className="bundle-export">
+        <div><h3><FileJson size={14}/> 一鍵匯出全年組合包</h3><p>單一 JSON 內含：本命盤＋{year || '該'} 年年運＋該年 12 個月月運，一個檔案就能交給解盤技能。</p></div>
+        <button type="button" className="secondary" disabled={bundleBusy || running || natalBusy} onClick={() => void runBundle()}>{bundleBusy ? <LoaderCircle size={15} className="spin"/> : <FileJson size={15}/>} {bundleBusy ? `計算中 ${bundleProgress}%` : '匯出組合包 JSON'}</button>
+        {bundleBusy && <div className="bundle-progress"><div className="period-progress" role="progressbar" aria-label="組合包計算進度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={bundleProgress}><span style={{ width: `${bundleProgress}%` }}/></div><button type="button" className="text-button" onClick={() => { controller.current?.abort(); setBundleBusy(false); }}>取消</button></div>}
+      </div>}
       {running && <div className="period-progress" role="progressbar" aria-label="行運計算進度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }}/></div>}
       {error && <p className="error-box" role="alert"><Info size={15}/>{error}</p>}
     </div>

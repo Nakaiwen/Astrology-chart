@@ -26,3 +26,20 @@ check('House boundaries include their own cusp, including 360° wrap',()=>{const
 check('Aspect motion is consistent with next minute of planetary positions',()=>{for(const a of chart.chart_data.aspects){if(a.applying===undefined||a.exact)continue;const names=['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto','True Node'];const ids=[names.indexOf(a.body_a),names.indexOf(a.body_b)];const values=ids.map(i=>swe.calculatePosition(chart.metadata.julian_day+1/1440,i===10?11:i,260).longitude);const sep=Math.abs(((values[0]-values[1]+540)%360)-180),angle=({conjunction:0,sextile:60,square:90,trine:120,opposition:180} as Record<string,number>)[a.aspect];assert.equal(Math.abs(sep-angle)<a.orb_degrees,a.applying,`${a.body_a} ${a.aspect} ${a.body_b}`);}});
 if(process.env.CHART_TEST_OUTPUT)writeFileSync(process.env.CHART_TEST_OUTPUT,JSON.stringify(chart,null,2));
 swe.close();console.log(`${count} checks passed.`);
+
+const { formFromExport } = await import('../lib/astrology.ts');
+check('formFromExport restores the form from natal, transit and bundle exports', () => {
+  const restored = formFromExport(JSON.parse(JSON.stringify(chart)));
+  assert.equal(restored.date, DEFAULT_INPUT.date); assert.equal(restored.time, DEFAULT_INPUT.time);
+  assert.equal(restored.unknownTime, false); assert.equal(restored.timezone, DEFAULT_INPUT.timezone);
+  assert.equal(restored.latitude, DEFAULT_INPUT.latitude); assert.equal(restored.houseSystem, 'Placidus');
+  assert.equal(restored.orb, 'focused'); assert.equal(restored.question, DEFAULT_INPUT.question);
+  const transit = { reading_type: 'transit', tradition_mode: chart.tradition_mode, chart_data: chart.chart_data, natal_metadata: chart.metadata, user_question: '請白話解讀這段月運的主要生活主題與可行建議。' };
+  assert.equal(formFromExport(transit).date, DEFAULT_INPUT.date);
+  assert.equal(formFromExport(transit).question, DEFAULT_INPUT.question);
+  const bundle = { reading_type: 'year_bundle', natal: chart };
+  assert.equal(formFromExport(bundle).place, DEFAULT_INPUT.place);
+  const unknown = calculateWithEngine(swe, { ...DEFAULT_INPUT, unknownTime: true });
+  assert.equal(formFromExport(JSON.parse(JSON.stringify(unknown))).unknownTime, true);
+  for (const bad of [null, 42, {}, { reading_type: 'natal' }, { reading_type: 'transit', chart_data: chart.chart_data }]) assert.throws(() => formFromExport(bad));
+});

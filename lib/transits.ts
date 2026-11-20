@@ -1,6 +1,6 @@
 import { Temporal } from '@js-temporal/polyfill';
 import type { SwissEphemeris } from '@swisseph/browser';
-import { ASPECT_ZH, BODY_NAMES, BODY_ZH, DEFAULT_INPUT, getEngine, houseOf, signed, zodiac, type Chart, type Zodiac } from './astrology.ts';
+import { ASPECT_ZH, BODY_NAMES, BODY_ZH, DEFAULT_INPUT, getEngine, houseOf, signed, VERSION, zodiac, type Chart, type Zodiac } from './astrology.ts';
 
 export type PeriodMode = 'monthly' | 'yearly';
 export type PeriodRequest = { mode: PeriodMode; year: number; month: number; timezone: string };
@@ -147,11 +147,50 @@ export async function calculateTransitsWithEngine(engine: Engine, natal: Chart, 
     reading_type: 'transit', tradition_mode: natal.tradition_mode, tone: 'practical', language: 'zh-TW', user_question: natal.user_question === DEFAULT_INPUT.question ? `請白話解讀這段${request.mode === 'monthly' ? '月運' : '年運'}的主要生活主題與可行建議。` : natal.user_question,
     chart_data: natal.chart_data, natal_metadata: natal.metadata,
     transit_data: { mode: request.mode, period, calculated_start: iso(start), orb: ORB, bodies: [...bodies], targets: targets.map(t => t.body), events, months },
-    metadata: { version: '1.1.0', method: 'Swiss Ephemeris / Moshier; tropical geocentric ecliptic longitude. Calendar period in observation timezone; end exclusive. Major transits to fixed natal positions; 1° orb. Six-hour grid with refined stations, orb-boundary and exact-angle roots (100 ms numerical bracket). Report dates are displayed to the minute, not a claim of birth-time accuracy. No lunar transits, returns, progressions or profections.', warnings },
+    metadata: { version: VERSION, method: 'Swiss Ephemeris / Moshier; tropical geocentric ecliptic longitude. Calendar period in observation timezone; end exclusive. Major transits to fixed natal positions; 1° orb. Six-hour grid with refined stations, orb-boundary and exact-angle roots (100 ms numerical bracket). Report dates are displayed to the minute, not a claim of birth-time accuracy. No lunar transits, returns, progressions or profections.', warnings },
   };
 }
 export async function calculateTransits(natal: Chart, request: PeriodRequest, options: Options = {}) {
   return calculateTransitsWithEngine(await getEngine(), natal, request, options);
+}
+
+/** One file for a whole year: the natal chart, the yearly slow-planet transits and twelve monthly blocks. */
+export type YearBundle = {
+  reading_type: 'year_bundle'; tradition_mode: Chart['tradition_mode']; tone: 'practical'; language: 'zh-TW';
+  user_question?: string;
+  natal: Chart;
+  transit_year: number; timezone: string;
+  yearly: TransitReport['transit_data'];
+  monthly: TransitReport['transit_data'][];
+  metadata: { version: string; method: string; warnings: string[] };
+};
+export async function calculateYearBundleWithEngine(engine: Engine, natal: Chart, year: number, timezone: string, options: Options = {}): Promise<YearBundle> {
+  const scale = (base: number, span: number) => (p: number) => options.onProgress?.(Math.min(99, Math.round(base + p * span / 100)));
+  const yearly = await calculateTransitsWithEngine(engine, natal, { mode: 'yearly', year, month: 1, timezone }, { signal: options.signal, onProgress: scale(0, 36) });
+  const monthly: TransitReport['transit_data'][] = [];
+  const warnings = new Set<string>(yearly.metadata.warnings);
+  for (let month = 1; month <= 12; month++) {
+    try {
+      const report = await calculateTransitsWithEngine(engine, natal, { mode: 'monthly', year, month, timezone }, { signal: options.signal, onProgress: scale(36 + (month - 1) * 64 / 12, 64 / 12) });
+      monthly.push(report.transit_data);
+      for (const w of report.metadata.warnings) warnings.add(w);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') throw e;
+      warnings.add(`${year} 年 ${month} 月未計算：${e instanceof Error ? e.message : '計算未完成。'}`);
+    }
+  }
+  if (!monthly.length) throw new Error('這一年沒有可計算的月份，請確認年份晚於出生日期。');
+  options.onProgress?.(100);
+  return {
+    reading_type: 'year_bundle', tradition_mode: natal.tradition_mode, tone: 'practical', language: 'zh-TW',
+    ...(natal.user_question ? { user_question: natal.user_question } : {}),
+    natal, transit_year: year, timezone,
+    yearly: yearly.transit_data, monthly,
+    metadata: { version: VERSION, method: `${yearly.metadata.method} Year bundle: one natal chart plus the yearly (Jupiter–Pluto) block and twelve monthly (Sun–Pluto) blocks of the same calendar year; months before birth are skipped with a warning.`, warnings: [...warnings] },
+  };
+}
+export async function calculateYearBundle(natal: Chart, year: number, timezone: string, options: Options = {}) {
+  return calculateYearBundleWithEngine(await getEngine(), natal, year, timezone, options);
 }
 export function eventTitle(e: TransitEvent) { return `行運${BODY_ZH[e.transit_body]} ${ASPECT_ZH[e.aspect]} 本命${BODY_ZH[e.natal_body]}`; }
 const DOMAINS: Record<string, string> = { Sun: '自我方向與目標', Moon: '情緒、安全感與生活節奏', Mercury: '學習、思考與表達', Venus: '關係、喜好與價值選擇', Mars: '行動、競爭與精力分配', Jupiter: '學習視野與成長規劃', Saturn: '責任、紀律與長期安排', Uranus: '自主性與改變方式', Neptune: '理想、想像與界線', Pluto: '深層習慣與掌控感', Ascendant: '自我呈現與生活步調', Midheaven: '工作方向與公開角色' };
