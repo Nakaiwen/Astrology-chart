@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, CalendarDays, Check, ChevronDown, Copy, FileJson, Info, LoaderCircle, Printer, Sparkles, X } from 'lucide-react';
-import { BODY_ZH, ASPECT_COLORS, formatPosition, type Chart, type FormInput } from '../lib/astrology';
+import { BODY_ZH, ASPECT_COLORS, fileSlug, formatPosition, type Chart, type FormInput } from '../lib/astrology';
 import { calculateTransits, calculateYearBundle, eventGuidance, eventTitle, periodRange, primaryEvents, transitPrompt, type PeriodMode, type TransitEvent, type TransitReport } from '../lib/transits';
 
 type Props = { mode: PeriodMode; form: FormInput; natal: Chart | null; natalBusy: boolean; calculateNatal: () => Promise<Chart | null> };
@@ -10,7 +10,7 @@ const INITIAL_YEAR = localNow.find(p => p.type === 'year')!.value;
 const INITIAL_MONTH = Number(localNow.find(p => p.type === 'month')!.value);
 function download(report: TransitReport) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' }));
-  const a = document.createElement('a'); a.href = url; a.download = `${report.transit_data.mode === 'monthly' ? 'monthly' : 'yearly'}_${report.transit_data.period.local_start.slice(0, report.transit_data.mode === 'monthly' ? 7 : 4)}.json`;
+  const a = document.createElement('a'); a.href = url; a.download = `${fileSlug(report.natal_metadata.name)}_${report.transit_data.mode === 'monthly' ? 'monthly' : 'yearly'}_${report.transit_data.period.local_start.slice(0, report.transit_data.mode === 'monthly' ? 7 : 4)}.json`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 export default function PeriodPanel({ mode, form, natal, natalBusy, calculateNatal }: Props) {
@@ -58,7 +58,7 @@ export default function PeriodPanel({ mode, form, natal, natalBusy, calculateNat
       const bundle = await calculateYearBundle(updated, y, tz, { signal: task.signal, onProgress: setBundleProgress });
       if (task.signal.aborted) return;
       const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json;charset=utf-8' }));
-      const a = document.createElement('a'); a.href = url; a.download = `bundle_${y}.json`;
+      const a = document.createElement('a'); a.href = url; a.download = `${fileSlug(updated.metadata.name)}_bundle_${y}.json`;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (e) {
       if (!task.signal.aborted) setError(e instanceof Error ? e.message : '組合包計算未完成，請再試一次。');

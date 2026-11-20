@@ -43,3 +43,12 @@ check('formFromExport restores the form from natal, transit and bundle exports',
   assert.equal(formFromExport(JSON.parse(JSON.stringify(unknown))).unknownTime, true);
   for (const bad of [null, 42, {}, { reading_type: 'natal' }, { reading_type: 'transit', chart_data: chart.chart_data }]) assert.throws(() => formFromExport(bad));
 });
+
+const { fileSlug } = await import('../lib/astrology.ts');
+check('fileSlug keeps CJK, strips path characters, never empty', () => {
+  assert.equal(fileSlug('Nakai'), 'Nakai');
+  assert.equal(fileSlug('示範星盤'), '示範星盤');
+  assert.equal(fileSlug('  a/b\\c:d*e?f"g<h>i|j. '), 'abcdefghij');
+  assert.equal(fileSlug('   '), '星盤');
+  assert.equal(fileSlug('小 六 太 乙'), '小_六_太_乙');
+});
