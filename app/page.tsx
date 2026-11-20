@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, Compass, Copy, FileJson, FolderOpen, Info, LoaderCircle, MapPin, Maximize2, Moon, RotateCcw, ShieldCheck, Sparkles, Sun, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, Compass, Copy, FileJson, FolderOpen, Info, LoaderCircle, MapPin, Maximize2, Moon, ShieldCheck, Sparkles, Sun, X } from 'lucide-react';
 import { ASPECT_COLORS, ASPECT_ZH, BODY_GLYPHS, BODY_ZH, calculateChart, type Chart, DEFAULT_INPUT, DIGNITY_ZH, type FormInput, formatPosition, formFromExport, readingPrompt, VERSION } from '@/lib/astrology';
 import { CITIES } from '@/lib/cities';
 import { wheelSvg } from '@/lib/chart-svg';
@@ -24,7 +24,6 @@ export default function Home(){
  useEffect(()=>{if(help||zoom||copyFallback){dialog.current?.showModal();}else dialog.current?.close();},[help,zoom,copyFallback]);
  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),5000);return()=>clearTimeout(t);},[notice]);
  function changeCity(id:string){setCity(id);const c=CITIES.find(c=>c.id===id);if(c)setForm(f=>({...f,place:c.name,latitude:String(c.lat),longitude:String(c.lon),timezone:c.tz}));}
- function example(){const input={...DEFAULT_INPUT};setForm(input);setCity('taipei');void calculate(input);}
  async function importFile(e:React.ChangeEvent<HTMLInputElement>){
   const file=e.target.files?.[0];e.target.value='';
   if(!file)return;
@@ -50,7 +49,7 @@ export default function Home(){
    <div className="workspace">
     <aside className="input-column">
      <form className="form-card" onSubmit={e=>{e.preventDefault();void calculate({...form});}}>
-      <div className="section-title"><div><span className="section-no">01</span><h2>出生資料</h2></div><button type="button" className="text-button" onClick={example} disabled={busy} title="載入 2000 年 1 月 1 日中午 12:00 的示範資料"><RotateCcw size={13}/> 載入範例</button><input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={importFile} aria-label="讀取星圖室 JSON 檔案"/></div>
+      <div className="section-title"><div><span className="section-no">01</span><h2>出生資料</h2></div><input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={importFile} aria-label="讀取星圖室 JSON 檔案"/></div>
       <label className="field">星盤名稱 <span className="optional">選填</span><input value={form.name} maxLength={40} onChange={e=>set('name',e.target.value)} placeholder="為這張星盤取個名字"/></label>
       <label className="field">出生日期<input type="date" value={form.date} min="1900-01-01" max="2100-12-31" onChange={e=>set('date',e.target.value)} required/></label>
       <label className="field">出生時間 <span className="optional">出生地當地時間</span><input type="time" value={form.time} onChange={e=>set('time',e.target.value)} disabled={form.unknownTime} required={!form.unknownTime}/></label>
@@ -71,6 +70,7 @@ export default function Home(){
       {error&&<p className="error-box" role="alert"><Info size={16}/>{error}</p>}
       <button type="submit" className="primary calculate" disabled={busy}>{busy?<LoaderCircle className="spin" size={17}/>:<Sparkles size={17}/>} {busy?'正在計算星圖…':view==='natal'?'繪製我的星盤':'更新本命資料'}{!busy&&<ArrowUpRight size={17}/>}</button>
       <div className="io-row"><button type="button" className="secondary" onClick={()=>fileInput.current?.click()} disabled={busy} title="載入星圖室匯出的 JSON（本命盤、月運、年運或全年組合包），自動填回出生資料並重新排盤"><FolderOpen size={15}/>讀取檔案</button><button type="button" className="secondary" disabled={disabled} onClick={exportJson} title={dirty?'資料已變更，請先按上方按鈕重新繪製':'下載本命盤 JSON，可交給解盤技能'}><FileJson size={15}/>下載 JSON</button></div>
+      <button type="button" className="secondary png-button" disabled={disabled||pngBusy} onClick={exportPng} title={dirty?'資料已變更，請先重新繪製星盤':'輸出 2160×2160 的星盤圖片'}>{pngBusy?<LoaderCircle className="spin" size={15}/>:<ArrowDownToLine size={15}/>}儲存星盤 PNG</button>
       <p className="privacy"><ShieldCheck size={13}/>出生資料在你的瀏覽器內計算</p>
      </form>
      <div className="next-note"><span className="tiny-star">✧</span><div><h3>把星圖帶進下一段對話</h3><p>完成排盤後，複製解盤資料或下載 JSON，交給 astrology-skill 接續解讀。</p><button className="text-button" onClick={()=>setHelp(true)}>了解使用步驟 <ArrowUpRight size={13}/></button></div></div>
@@ -78,12 +78,11 @@ export default function Home(){
     <section className="result-column" aria-label="排盤結果" aria-busy={busy}>
      {view!=='natal'?<PeriodPanel mode={view} form={form} natal={chart} natalBusy={busy} calculateNatal={()=>calculate({...form})}/>:chart?<>
       <div className="chart-card">
-       <div className="chart-heading"><div><p className="eyebrow">THE SKY AT YOUR BEGINNING</p><h2>{chart.metadata.name}<span>本命星盤</span></h2><p className="birth-caption">{chart.metadata.local_date.replaceAll('-',' / ')} <b>·</b> {chart.metadata.local_time??'時間不確定'} <b>·</b> {chart.metadata.place}</p></div><span className="system-pill">{HOUSE_LABELS[chart.chart_data.house_system]}</span></div>
+       <div className="chart-heading"><div><p className="eyebrow">THE SKY AT YOUR BEGINNING</p><h2>{chart.metadata.name}<span>本命星盤</span></h2><p className="birth-caption">{chart.metadata.local_date.replaceAll('-',' / ')} <b>·</b> {chart.metadata.local_time??'時間不確定'} <b>·</b> {chart.metadata.place}</p></div><div className="heading-side"><span className="system-pill">{HOUSE_LABELS[chart.chart_data.house_system]}</span><button className="primary copy-top" disabled={disabled} onClick={copyReading}><Copy size={14}/>複製解盤資料</button></div></div>
        {dirty&&<div className="dirty-banner" role="status"><Info size={15}/>資料已變更，請按「繪製我的星盤」更新結果。</div>}
        <div className="big-three">{[{icon:<Sun size={20}/>,label:'太陽',p:chart.chart_data.placements[0]},{icon:<Moon size={20}/>,label:'月亮',p:chart.chart_data.placements[1]},{icon:<ArrowUpRight size={20}/>,label:'上升',p:chart.chart_data.ascendant}].map(item=><div key={item.label}><span className="three-icon">{item.icon}</span><div><small>{item.label}{chart.metadata.local_time===null&&item.label==='月亮'?'・正午參考':''}</small><strong>{formatPosition(item.p,true)}</strong></div></div>)}</div>
        <div className="wheel-wrap"><button className="zoom-button" title="放大星盤" aria-label="放大星盤" onClick={()=>setZoom(true)}><Maximize2 size={17}/></button><div className="wheel" onClick={wheelClick} dangerouslySetInnerHTML={{__html:svg}}/></div>
        <div className="wheel-caption">{focused?<><span className="focus-dot"/>{BODY_ZH[focused.body]} · {formatPosition(focused)} · {focused.house?`第 ${focused.house} 宮`:'宮位未知'}<button onClick={()=>setSelected(null)} aria-label="清除行星選取"><X size={13}/></button></>:<><span className="focus-dot"/>點選圖中行星，查看它的相位連線</>}</div>
-       <div className="export-bar"><button className="primary" disabled={disabled} onClick={copyReading}><Copy size={15}/>複製解盤資料</button><button className="image-button" disabled={disabled||pngBusy} onClick={exportPng}>{pngBusy?<LoaderCircle className="spin" size={15}/>:<ArrowDownToLine size={16}/>}儲存星盤 PNG</button></div>
       </div>
       <div className="data-card"><div className="data-top"><div className="tabs" role="tablist" aria-label="星盤資料">{([['placements','行星位置'],['houses','宮位與宮主'],['aspects','主要相位'],['json','JSON']]as[Tab,string][]).map(([id,label])=><button role="tab" aria-selected={tab===id} id={`tab-${id}`} aria-controls="data-panel" key={id} onClick={()=>setTab(id)}>{label}</button>)}</div><span className="data-tag">CHART DATA</span></div>
        <div role="tabpanel" id="data-panel" aria-labelledby={`tab-${tab}`}>
